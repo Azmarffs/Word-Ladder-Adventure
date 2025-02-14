@@ -202,38 +202,6 @@ class WordLadderGame:
             self.current_game['target_word']
         )
 
-def main():
-    """Example usage of the WordLadderGame class."""
-    game = WordLadderGame()
-    
-    # Start a new game
-    print("\nStarting new Word Ladder game...")
-    game_state = game.start_game('BEGINNER')
-    print(f"Start word: {game_state['start_word']}")
-    print(f"Target word: {game_state['target_word']}")
-    print(f"Maximum moves: {game_state['max_moves']}")
-    
-    # Example game loop
-    while game_state['status'] == 'PLAYING':
-        print(f"\nCurrent word: {game_state['current_word']}")
-        print(f"Moves used: {game_state['moves']}/{game_state['max_moves']}")
-        
-        # Get a hint
-        hint = game.get_hint()
-        print(f"Hint: Try '{hint}'")
-        
-        # In a real game, you would get input from the user
-        # For this demo, we'll use the hint
-        try:
-            game_state = game.make_move(hint)
-        except ValueError as e:
-            print(f"Error: {e}")
-            continue
-    
-    # Game over
-    print("\nGame Over!")
-    print(f"Status: {game_state['status']}")
-    print(f"Path taken: {' -> '.join(game_state['path'])}")
-
 if __name__ == "__main__":
-    main()
+    game = WordLadderGame()
+    game.start_game('BEGINNER')
