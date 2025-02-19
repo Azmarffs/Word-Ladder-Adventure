@@ -197,6 +197,15 @@ class DifficultyButton(AnimatedButton):
             if selected:
                 # Draw selection indicator
                 pygame.draw.rect(screen, SUCCESS_COLOR, self.rect, 3, border_radius=12)
+    
+    def handle_event(self, event: pygame.event.Event) -> bool:
+        if event.type == pygame.MOUSEMOTION:
+            self.hover = self.rect.collidepoint(event.pos)
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Left click
+            if self.rect.collidepoint(event.pos):
+                self.click_animation = 1.0
+                return True
+        return False
 
 class ModernInputBox:
     def __init__(self, x: int, y: int, width: int, height: int):
@@ -542,21 +551,16 @@ class WordLadderGUI:
         self.menu_state = MENU_STATE_MAIN
         self.main_menu = MainMenu()
         self.help_menu = HelpMenu()
-        self.selected_difficulty = 'BEGINNER'
+        self.selected_difficulty = None
         
         # Create UI elements
         center_x = WINDOW_WIDTH // 2
-        self.input_box = ModernInputBox(center_x - INPUT_WIDTH//2, 
-                                      WINDOW_HEIGHT//2 + 50, 
-                                      INPUT_WIDTH, 
-                                      INPUT_HEIGHT)
         
         # Create difficulty buttons
-        difficulty_y = WINDOW_HEIGHT//4
-        difficulty_spacing = BUTTON_WIDTH + PADDING
+        difficulty_y = WINDOW_HEIGHT//2 - 100
         self.difficulty_buttons = {
             'BEGINNER': DifficultyButton(
-                center_x - difficulty_spacing - BUTTON_WIDTH//2,
+                center_x - BUTTON_WIDTH//2,
                 difficulty_y,
                 BUTTON_WIDTH,
                 BUTTON_HEIGHT,
@@ -566,7 +570,7 @@ class WordLadderGUI:
             ),
             'ADVANCED': DifficultyButton(
                 center_x - BUTTON_WIDTH//2,
-                difficulty_y,
+                difficulty_y + BUTTON_HEIGHT + 30,
                 BUTTON_WIDTH,
                 BUTTON_HEIGHT,
                 "Advanced",
@@ -574,8 +578,8 @@ class WordLadderGUI:
                 "4-5 letter words, 7 moves"
             ),
             'CHALLENGE': DifficultyButton(
-                center_x + difficulty_spacing - BUTTON_WIDTH//2,
-                difficulty_y,
+                center_x - BUTTON_WIDTH//2,
+                difficulty_y + (BUTTON_HEIGHT + 30) * 2,
                 BUTTON_WIDTH,
                 BUTTON_HEIGHT,
                 "Challenge",
@@ -584,27 +588,25 @@ class WordLadderGUI:
             )
         }
         
-        button_y = WINDOW_HEIGHT - BUTTON_HEIGHT - PADDING
+        self.input_box = ModernInputBox(center_x - INPUT_WIDTH//2, 
+                                      WINDOW_HEIGHT//2 + 50, 
+                                      INPUT_WIDTH, 
+                                      INPUT_HEIGHT)
+        
         self.game_buttons = {
-            'start': AnimatedButton(center_x - BUTTON_WIDTH - PADDING, 
-                                  button_y,
-                                  BUTTON_WIDTH, 
-                                  BUTTON_HEIGHT, 
-                                  "New Game", 
-                                  PRIMARY_COLOR),
-            'hint': AnimatedButton(center_x + PADDING, 
-                                 button_y,
-                                 BUTTON_WIDTH, 
-                                 BUTTON_HEIGHT, 
-                                 "Get Hint", 
-                                 SECONDARY_COLOR),
             'menu': MenuButton(PADDING, 
                              PADDING,
                              BUTTON_WIDTH, 
                              BUTTON_HEIGHT, 
                              "Main Menu", 
                              SECONDARY_COLOR,
-                             "←")
+                             "←"),
+            'hint': AnimatedButton(center_x + PADDING, 
+                                 WINDOW_HEIGHT - BUTTON_HEIGHT - PADDING,
+                                 BUTTON_WIDTH, 
+                                 BUTTON_HEIGHT, 
+                                 "Get Hint", 
+                                 SECONDARY_COLOR)
         }
         
         self.message = ""
@@ -617,77 +619,68 @@ class WordLadderGUI:
         self.screen.fill(BACKGROUND_COLOR)
         self.animation_time += 0.02
         
+        # Draw animated background
+        for i in range(10):
+            x = WINDOW_WIDTH * 0.1 * i
+            y = WINDOW_HEIGHT * (0.5 + 0.2 * math.sin(self.animation_time + i * 0.5))
+            radius = 20 + 10 * math.sin(self.animation_time * 2 + i)
+            pygame.draw.circle(self.screen, (*PRIMARY_COLOR, 30), (int(x), int(y)), int(radius))
+        
         if self.menu_state == MENU_STATE_MAIN:
             self.main_menu.draw(self.screen)
         elif self.menu_state == MENU_STATE_HELP:
             self.help_menu.draw(self.screen)
-        else:  # MENU_STATE_GAME
-            # Draw decorative background patterns
-            for i in range(10):
-                x = WINDOW_WIDTH * 0.1 * i
-                y = WINDOW_HEIGHT * (0.5 + 0.2 * math.sin(self.animation_time + i * 0.5))
-                radius = 20 + 10 * math.sin(self.animation_time * 2 + i)
-                pygame.draw.circle(self.screen, (*PRIMARY_COLOR, 30), (int(x), int(y)), int(radius))
-            
-            # Draw difficulty buttons
-            for diff, button in self.difficulty_buttons.items():
-                button.draw(self.screen, diff == self.selected_difficulty)
-            
-            if self.game_state:
-                # Draw word graph
+        elif self.menu_state == MENU_STATE_GAME:
+            if not self.game_state:
+                # Draw difficulty selection screen
+                font_title = pygame.font.Font(None, 64)
+                title = font_title.render("Select Difficulty", True, PRIMARY_COLOR)
+                title_rect = title.get_rect(centerx=WINDOW_WIDTH//2, y=100)
+                self.screen.blit(title, title_rect)
+                
+                # Draw difficulty buttons
+                for diff, button in self.difficulty_buttons.items():
+                    button.draw(self.screen, diff == self.selected_difficulty)
+                
+                # Draw back button
+                self.game_buttons['menu'].draw(self.screen)
+            else:
+                # Draw game screen
                 self.word_graph.update_layout(self.game_state['path'])
                 self.word_graph.draw(self.screen, 
                                    self.game_state['current_word'],
                                    self.game_state['target_word'])
                 
-                # Draw game info with modern styling
-                info_panel = pygame.Surface((300, 200), pygame.SRCALPHA)
-                pygame.draw.rect(info_panel, (*WHITE, 200), info_panel.get_rect(), border_radius=15)
-                
-                # Add decorative header
-                pygame.draw.rect(info_panel, PRIMARY_COLOR, 
-                               (0, 0, 300, 40), border_radius=15)
-                pygame.draw.rect(info_panel, PRIMARY_COLOR, 
-                               (0, 20, 300, 20))
-                
+                # Draw game info
                 font = pygame.font.Font(None, 36)
+                info_text = [
+                    f"Current Word: {self.game_state['current_word']}",
+                    f"Target Word: {self.game_state['target_word']}",
+                    f"Moves: {self.game_state['moves']}/{self.game_state['max_moves']}",
+                    f"Score: {self.score}"
+                ]
                 
-                # Header text
-                header = font.render("Game Info", True, WHITE)
-                header_rect = header.get_rect(centerx=150, y=10)
-                info_panel.blit(header, header_rect)
+                for i, text in enumerate(info_text):
+                    surface = font.render(text, True, BLACK)
+                    self.screen.blit(surface, (PADDING, PADDING + 40*i))
                 
-                # Game stats
-                y_offset = 50
-                for label, value in [
-                ]:
-                    ("Difficulty:", self.selected_difficulty.capitalize()),
-                    ("Start Word:", self.game_state['start_word']),
-                    ("Target Word:", self.game_state['target_word']),
-                    ("Moves:", f"{self.game_state['moves']}/{self.game_state['max_moves']}"),
-                    ("Score:", str(self.score)),
-                    ("High Score:", str(self.high_score))
-                    text = font.render(f"{label} {value}", True, BLACK)
-                    info_panel.blit(text, (20, y_offset))
-                    y_offset += 30
+                # Draw input box and buttons
+                self.input_box.draw(self.screen)
+                for button in self.game_buttons.values():
+                    button.draw(self.screen)
                 
-                self.screen.blit(info_panel, (PADDING, 100))
-            
-            # Draw message with fade animation
-            if self.message:
-                if self.message_animation < 1:
-                    self.message_animation = min(1, self.message_animation + 0.05)
-                font = pygame.font.Font(None, 36)
-                message_text = font.render(self.message, True, self.message_color)
-                message_text.set_alpha(int(255 * self.message_animation))
-                message_rect = message_text.get_rect(centerx=WINDOW_WIDTH//2, y=WINDOW_HEIGHT//2 - 50)
-                self.screen.blit(message_text, message_rect)
-            
-            # Draw UI elements
-            self.input_box.draw(self.screen)
-            for button in self.game_buttons.values():
-                button.draw(self.screen)
-            
+                # Draw message
+                if self.message:
+                    if self.message_animation < 1:
+                        self.message_animation = min(1, self.message_animation + 0.05)
+                    message_surface = font.render(self.message, True, self.message_color)
+                    message_surface.set_alpha(int(255 * self.message_animation))
+                    message_rect = message_surface.get_rect(
+                        centerx=WINDOW_WIDTH//2,
+                        y=WINDOW_HEIGHT//2 - 100
+                    )
+                    self.screen.blit(message_surface, message_rect)
+        
         pygame.display.flip()
         
     def show_message(self, text: str, color: Tuple[int, int, int]):
@@ -714,40 +707,40 @@ class WordLadderGUI:
                     new_state = self.main_menu.handle_event(event)
                     if new_state:
                         self.menu_state = new_state
+                        if new_state == MENU_STATE_GAME:
+                            self.game_state = None
+                            self.selected_difficulty = None
                 
                 elif self.menu_state == MENU_STATE_HELP:
                     new_state = self.help_menu.handle_event(event)
                     if new_state:
                         self.menu_state = new_state
                 
-                else:  # MENU_STATE_GAME
-                    if event.type == pygame.MOUSEBUTTONDOWN:
+                elif self.menu_state == MENU_STATE_GAME:
+                    if not self.game_state:
                         # Handle difficulty selection
                         for diff, button in self.difficulty_buttons.items():
                             if button.handle_event(event):
                                 self.selected_difficulty = diff
-                                if self.game_state:
-                                    self.show_message(f"Difficulty changed to {diff}", PRIMARY_COLOR)
-                    
-                    # Handle button events
-                    if self.game_buttons['menu'].handle_event(event):
-                        self.menu_state = MENU_STATE_MAIN
-                    elif self.game_buttons['start'].handle_event(event):
-                        self.game_state = self.game.start_game(self.selected_difficulty)
-                        self.show_message(f"Game started in {self.selected_difficulty} mode! Enter your word", BLACK)
-                    elif self.game_buttons['hint'].handle_event(event):
-                        if self.game_state and self.game_state['status'] == 'PLAYING':
-                            hint = self.game.get_hint()
-                            if hint:
-                                self.show_message(f"Hint: Try '{hint}'", SECONDARY_COLOR)
-                    
-                    # Handle input box events
-                    word = self.input_box.handle_event(event)
-                    if word:
-                        if not self.game_state or self.game_state['status'] != 'PLAYING':
-                            self.show_message("Start a new game first!", ERROR_COLOR)
-                            self.input_box.show_error()
-                        else:
+                                self.game_state = self.game.start_game(diff)
+                                self.show_message(f"Transform '{self.game_state['start_word']}' into '{self.game_state['target_word']}'", PRIMARY_COLOR)
+                                break
+                        
+                        # Handle back button
+                        if self.game_buttons['menu'].handle_event(event):
+                            self.menu_state = MENU_STATE_MAIN
+                    else:
+                        # Handle game input
+                        if self.game_buttons['menu'].handle_event(event):
+                            self.menu_state = MENU_STATE_MAIN
+                        elif self.game_buttons['hint'].handle_event(event):
+                            if self.game_state['status'] == 'PLAYING':
+                                hint = self.game.get_hint()
+                                if hint:
+                                    self.show_message(f"Hint: Try '{hint}'", SECONDARY_COLOR)
+                        
+                        word = self.input_box.handle_event(event)
+                        if word:
                             try:
                                 self.game_state = self.game.make_move(word)
                                 if self.game_state['status'] == 'WON':
@@ -758,14 +751,10 @@ class WordLadderGUI:
                             except ValueError as e:
                                 self.show_message(str(e), ERROR_COLOR)
                                 self.input_box.show_error()
-                    
-                    # Update hover states for difficulty buttons
-                    for button in self.difficulty_buttons.values():
-                        button.handle_event(event)
             
             self.draw()
             clock.tick(60)
-            
+        
         pygame.quit()
         sys.exit()
 
