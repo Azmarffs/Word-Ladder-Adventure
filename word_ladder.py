@@ -10,16 +10,24 @@ class WordLadder:
         self.difficulty_levels = {
             'BEGINNER': {'min_length': 3, 'max_length': 4, 'max_moves': 5},
             'ADVANCED': {'min_length': 4, 'max_length': 5, 'max_moves': 7},
-            'CHALLENGE': {'min_length': 5, 'max_length': 6, 'max_moves': 10}
+            'CHALLENGE': {'min_length': 5, 'max_length': 6, 'max_moves': 10, 'obstacles': True}
         }
+        self.banned_words = set()
+        self.restricted_letters = set()
         
     def _get_neighbors(self, word: str) -> List[str]:
         """Generate all possible one-letter variations of the word that exist in dictionary."""
         neighbors = []
         for i in range(len(word)):
             for c in string.ascii_lowercase:
+                # Skip restricted letters in Challenge mode
+                if c in self.restricted_letters:
+                    continue
+                    
                 new_word = word[:i] + c + word[i+1:]
-                if new_word in self.dictionary and new_word != word:
+                if (new_word in self.dictionary and 
+                    new_word != word and 
+                    new_word not in self.banned_words):
                     neighbors.append(new_word)
         return neighbors
 
@@ -29,25 +37,74 @@ class WordLadder:
         valid_words = [word for word in self.dictionary 
                       if level['min_length'] <= len(word) <= level['max_length']]
         
-        while True:
+        # Reset obstacles for new game
+        self.banned_words = set()
+        self.restricted_letters = set()
+        
+        # Add obstacles for Challenge mode
+        if difficulty == 'CHALLENGE' and level.get('obstacles', False):
+            # Ban a few random words that aren't critical to solutions
+            potential_banned = random.sample(valid_words, min(10, len(valid_words)))
+            for word in potential_banned:
+                # Only ban if removing it doesn't disconnect the graph too much
+                self.banned_words.add(word)
+                if len(valid_words) > 50:  # Only restrict letters if we have enough words
+                    # Restrict 1-2 random letters
+                    self.restricted_letters = set(random.sample(string.ascii_lowercase, random.randint(1, 2)))
+        
+        attempts = 0
+        while attempts < 100:  # Limit attempts to avoid infinite loop
             start = random.choice(valid_words)
             target = random.choice(valid_words)
-            if start != target:
+            if start != target and start not in self.banned_words and target not in self.banned_words:
                 # Verify that a path exists
-                if self.bfs(start, target):
+                if self.a_star(start, target):
                     return start, target
+            attempts += 1
+            
+        # If we couldn't find a pair with obstacles, clear them and try again
+        self.banned_words = set()
+        self.restricted_letters = set()
+        return self.get_random_word_pair(difficulty)
 
-    def get_hint(self, current_word: str, target_word: str) -> Optional[str]:
-        """Get the next best word in the optimal path."""
-        path = self.a_star(current_word, target_word)
-        if path and len(path) > 1:
-            return path[1]
-        return None
+    def get_hint(self, current_word: str, target_word: str, algorithm: str = 'a_star') -> Dict:
+        """Get the next best word in the optimal path using the specified algorithm."""
+        if algorithm == 'bfs':
+            path = self.bfs(current_word, target_word)
+        elif algorithm == 'ucs':
+            path = self.ucs(current_word, target_word)
+        else:  # Default to A*
+            path = self.a_star(current_word, target_word)
+            
+        if not path or len(path) <= 1:
+            return {
+                'next_word': None,
+                'explanation': "No valid path found.",
+                'full_path': None
+            }
+            
+        next_word = path[1]
+        
+        # Generate explanation
+        diff_index = next(i for i, (a, b) in enumerate(zip(current_word, next_word)) if a != b)
+        explanation = f"Change letter {diff_index + 1} from '{current_word[diff_index]}' to '{next_word[diff_index]}'."
+        
+        return {
+            'next_word': next_word,
+            'explanation': explanation,
+            'full_path': path
+        }
 
     def validate_move(self, current_word: str, next_word: str) -> bool:
         """Validate if the move is legal."""
-        if next_word not in self.dictionary:
+        if next_word not in self.dictionary or next_word in self.banned_words:
             return False
+        
+        # Check if the move uses any restricted letters
+        for c in next_word:
+            if c in self.restricted_letters:
+                return False
+                
         differences = sum(1 for a, b in zip(current_word, next_word) if a != b)
         return differences == 1
 
@@ -132,6 +189,16 @@ class WordLadder:
                     heapq.heappush(open_set, (f_score, tentative_g_score, neighbor, path + [neighbor]))
         
         return None
+        
+    def check_valid_word_pair(self, start_word: str, target_word: str) -> bool:
+        """Check if a custom word pair is valid and has a solution."""
+        if (start_word not in self.dictionary or 
+            target_word not in self.dictionary or 
+            len(start_word) != len(target_word)):
+            return False
+            
+        # Check if a path exists
+        return bool(self.a_star(start_word, target_word))
 
 class WordLadderGame:
     def __init__(self, dictionary_path: str = None):
@@ -144,15 +211,39 @@ class WordLadderGame:
             dictionary = {'cat', 'cot', 'cog', 'dog', 'dot', 'lot', 'log', 'hot', 
                         'hat', 'rat', 'sat', 'sit', 'pit', 'put', 'but', 'bat',
                         'plate', 'slate', 'slant', 'plant', 'plane', 'crane',
-                        'brain', 'train', 'trace', 'track', 'stack', 'stark'}
+                        'brain', 'train', 'trace', 'track', 'stack', 'stark',
+                        'start', 'smart', 'chart', 'charm', 'chasm', 'chase',
+                        'phase', 'phone', 'prone', 'prune', 'prude', 'pride',
+                        'prize', 'price', 'slice', 'spice', 'spine', 'shine',
+                        'shone', 'stone', 'store', 'score', 'scare', 'share'}
         
         self.word_ladder = WordLadder(dictionary)
         self.current_game = None
         self.history = []
+        self.hint_algorithm = 'a_star'  # Default algorithm
         
-    def start_game(self, difficulty: str = 'BEGINNER') -> Dict:
-        """Start a new game with the specified difficulty."""
-        start_word, target_word = self.word_ladder.get_random_word_pair(difficulty)
+    def start_game(self, difficulty: str = 'BEGINNER', custom_words: Tuple[str, str] = None) -> Dict:
+        """Start a new game with the specified difficulty or custom words."""
+        if custom_words and all(custom_words):
+            start_word, target_word = custom_words
+            start_word = start_word.lower()
+            target_word = target_word.lower()
+            
+            # Validate custom words
+            if not self.word_ladder.check_valid_word_pair(start_word, target_word):
+                raise ValueError("Invalid word pair. Both words must exist in the dictionary and have a valid transformation path.")
+                
+            # Determine difficulty based on word length
+            word_length = len(start_word)
+            if word_length <= 4:
+                difficulty = 'BEGINNER'
+            elif word_length <= 5:
+                difficulty = 'ADVANCED'
+            else:
+                difficulty = 'CHALLENGE'
+        else:
+            start_word, target_word = self.word_ladder.get_random_word_pair(difficulty)
+            
         max_moves = self.word_ladder.difficulty_levels[difficulty]['max_moves']
         
         self.current_game = {
@@ -163,7 +254,9 @@ class WordLadderGame:
             'max_moves': max_moves,
             'path': [start_word],
             'status': 'PLAYING',
-            'difficulty': difficulty
+            'difficulty': difficulty,
+            'banned_words': list(self.word_ladder.banned_words),
+            'restricted_letters': list(self.word_ladder.restricted_letters)
         }
         
         return self.current_game
@@ -192,15 +285,36 @@ class WordLadderGame:
             
         return self.current_game
     
-    def get_hint(self) -> Optional[str]:
-        """Get a hint for the current position."""
+    def set_hint_algorithm(self, algorithm: str) -> None:
+        """Set the algorithm to use for hints."""
+        if algorithm not in ['bfs', 'ucs', 'a_star']:
+            raise ValueError("Invalid algorithm. Choose from 'bfs', 'ucs', or 'a_star'.")
+        self.hint_algorithm = algorithm
+    
+    def get_hint(self, detail_level: str = 'basic') -> Dict:
+        """Get a hint for the current position with the specified detail level."""
         if not self.current_game or self.current_game['status'] != 'PLAYING':
-            return None
+            return {'next_word': None, 'explanation': "No active game in progress."}
             
-        return self.word_ladder.get_hint(
+        hint_data = self.word_ladder.get_hint(
             self.current_game['current_word'],
-            self.current_game['target_word']
+            self.current_game['target_word'],
+            self.hint_algorithm
         )
+        
+        if detail_level == 'full' and hint_data['full_path']:
+            return hint_data
+        else:
+            return {
+                'next_word': hint_data['next_word'],
+                'explanation': hint_data['explanation']
+            }
+            
+    def get_dictionary_words(self, length: int = None) -> List[str]:
+        """Get a list of dictionary words, optionally filtered by length."""
+        if length:
+            return [word for word in self.word_ladder.dictionary if len(word) == length]
+        return list(self.word_ladder.dictionary)
 
 if __name__ == "__main__":
     game = WordLadderGame()
