@@ -117,9 +117,9 @@ class AnimatedButton:
         return False
 
 class MenuButton(AnimatedButton):
-    def __init__(self, x: int, y: int, width: int, height: int, text: str, color: Tuple[int, int, int], icon: str = None):
+    def __init__(self, x: int, y: int, width: int, height: int, text: str, color: Tuple[int, int, int], icon_text: str = None):
         super().__init__(x, y, width, height, text, color)
-        self.icon = icon
+        self.icon_text = icon_text
         self.pulse = 0
         
     def draw(self, screen: pygame.Surface):
@@ -152,10 +152,10 @@ class MenuButton(AnimatedButton):
         pygame.draw.rect(gradient, (255, 255, 255, 30), gradient.get_rect(), border_radius=12)
         screen.blit(gradient, gradient_rect)
         
-        # Draw icon if provided
-        if self.icon:
+        # Draw icon if provided - using simple text-based icons instead of unicode
+        if self.icon_text:
             icon_font = pygame.font.Font(None, int(36 * self.scale * pulse_scale))
-            icon_surface = icon_font.render(self.icon, True, WHITE)
+            icon_surface = icon_font.render(self.icon_text, True, WHITE)
             icon_rect = icon_surface.get_rect(
                 centery=self.rect.centery,
                 x=self.rect.x + 20
@@ -399,19 +399,6 @@ class GraphNode:
         
         screen.blit(shadow_text, shadow_rect)
         screen.blit(text, text_rect)
-        
-        # Draw label if exists
-        if self.label:
-            label_font = pygame.font.Font(None, int(18 * self.scale))
-            label_surface = label_font.render(self.label, True, BLACK)
-            label_bg = pygame.Surface((label_surface.get_width() + 10, label_surface.get_height() + 6), pygame.SRCALPHA)
-            pygame.draw.rect(label_bg, (255, 255, 255, 200), label_bg.get_rect(), border_radius=8)
-            label_bg.blit(label_surface, (5, 3))
-            
-            # Position label above node
-            label_x = self.x - label_bg.get_width() // 2
-            label_y = self.y - scaled_radius - label_bg.get_height() - 5
-            screen.blit(label_bg, (label_x, label_y))
 
 class WordGraph:
     def __init__(self):
@@ -438,12 +425,6 @@ class WordGraph:
         
         # Store optimal path if provided
         self.optimal_path = optimal_path or []
-        
-        # Add labels to nodes in optimal path
-        if optimal_path:
-            for i, word in enumerate(optimal_path):
-                if word in self.nodes:
-                    self.nodes[word].label = f"Step {i+1}"
         
     def draw(self, screen: pygame.Surface, current_word: str, target_word: str):
         # Draw edges with animated gradient effect
@@ -480,6 +461,24 @@ class WordGraph:
             node.update()
             is_in_optimal = word in self.optimal_path
             node.draw(screen, word == current_word, word == target_word, is_in_optimal)
+            
+        # Draw step labels for optimal path nodes separately (on top of everything)
+        if self.optimal_path:
+            for i, word in enumerate(self.optimal_path):
+                if word in self.nodes:
+                    node = self.nodes[word]
+                    # Draw label
+                    label_font = pygame.font.Font(None, 18)
+                    label_text = f"Step {i+1}"
+                    label_surface = label_font.render(label_text, True, BLACK)
+                    label_bg = pygame.Surface((label_surface.get_width() + 10, label_surface.get_height() + 6), pygame.SRCALPHA)
+                    pygame.draw.rect(label_bg, (255, 255, 255, 200), label_bg.get_rect(), border_radius=8)
+                    label_bg.blit(label_surface, (5, 3))
+                    
+                    # Position label above node
+                    label_x = node.x - label_bg.get_width() // 2
+                    label_y = node.y - NODE_RADIUS - label_bg.get_height() - 5
+                    screen.blit(label_bg, (label_x, label_y))
 
 class CustomGameMenu:
     def __init__(self, game: WordLadderGame):
@@ -493,7 +492,7 @@ class CustomGameMenu:
             BUTTON_HEIGHT,
             "Back to Menu",
             SECONDARY_COLOR,
-            "←"
+            "<-"
         )
         
         self.start_input = ModernInputBox(
@@ -615,7 +614,7 @@ class AlgorithmMenu:
             BUTTON_HEIGHT,
             "Back to Game",
             SECONDARY_COLOR,
-            "←"
+            "<-"
         )
         
         self.algorithm_buttons = {
@@ -686,7 +685,7 @@ class MainMenu:
                 BUTTON_HEIGHT,
                 "Play Game",
                 PRIMARY_COLOR,
-                "▶"
+                ">"
             ),
             'custom': MenuButton(
                 center_x - BUTTON_WIDTH//2,
@@ -695,7 +694,7 @@ class MainMenu:
                 BUTTON_HEIGHT,
                 "Custom Game",
                 (52, 152, 219),  # Blue
-                "✎"
+                "+"
             ),
             'help': MenuButton(
                 center_x - BUTTON_WIDTH//2,
@@ -713,7 +712,7 @@ class MainMenu:
                 BUTTON_HEIGHT,
                 "Quit Game",
                 ERROR_COLOR,
-                "✕"
+                "X"
             )
         }
         
@@ -777,7 +776,7 @@ class HelpMenu:
             BUTTON_HEIGHT,
             "Back to Menu",
             SECONDARY_COLOR,
-            "←"
+            "<-"
         )
         
         self.scroll_offset = 0
@@ -883,18 +882,17 @@ class WordLadderGUI:
         }
         
         self.input_box = ModernInputBox(center_x - INPUT_WIDTH//2, 
-                                      WINDOW_HEIGHT//2 + 50, 
+                                      WINDOW_HEIGHT//2 + 100, 
                                       INPUT_WIDTH, 
                                       INPUT_HEIGHT)
         
         self.game_buttons = {
-            'menu': MenuButton(PADDING, 
-                             PADDING,
+            'menu': MenuButton(10, 10,  # Adjusted position
                              BUTTON_WIDTH, 
                              BUTTON_HEIGHT, 
                              "Main Menu", 
                              SECONDARY_COLOR,
-                             "←"),
+                             "<-"),
             'hint': AnimatedButton(center_x - BUTTON_WIDTH - 10, 
                                  WINDOW_HEIGHT - BUTTON_HEIGHT - PADDING,
                                  BUTTON_WIDTH, 
@@ -957,11 +955,9 @@ class WordLadderGUI:
                 # Draw back button
                 self.game_buttons['menu'].draw(self.screen)
             else:
-                # Draw game screen
-                self.word_graph.update_layout(self.game_state['path'], self.optimal_path)
-                self.word_graph.draw(self.screen, 
-                                   self.game_state['current_word'],
-                                   self.game_state['target_word'])
+                # Draw game info panel first (at the top)
+                info_panel = pygame.Surface((WINDOW_WIDTH, 120), pygame.SRCALPHA)
+                pygame.draw.rect(info_panel, (255, 255, 255, 180), info_panel.get_rect())
                 
                 # Draw game info
                 font = pygame.font.Font(None, 36)
@@ -974,30 +970,39 @@ class WordLadderGUI:
                 
                 for i, text in enumerate(info_text):
                     surface = font.render(text, True, BLACK)
-                    self.screen.blit(surface, (PADDING, PADDING + 40*i))
+                    info_panel.blit(surface, (PADDING, PADDING + 30*i))
                 
                 # Draw algorithm indicator
                 alg_color = ALGORITHM_COLORS[self.game.hint_algorithm]
                 alg_text = f"Hint: {self.game.hint_algorithm.upper()}"
                 alg_surface = font.render(alg_text, True, alg_color)
-                self.screen.blit(alg_surface, (WINDOW_WIDTH - alg_surface.get_width() - PADDING, PADDING))
+                info_panel.blit(alg_surface, (WINDOW_WIDTH - alg_surface.get_width() - PADDING, PADDING))
                 
                 # Draw obstacles info for Challenge mode
                 if self.game_state['difficulty'] == 'CHALLENGE':
-                    obstacles_y = PADDING + 40*len(info_text) + 20
+                    obstacles_y = PADDING + 30*len(info_text)
                     
                     if self.game_state.get('banned_words') and len(self.game_state['banned_words']) > 0:
                         banned_text = f"Banned Words: {', '.join(self.game_state['banned_words'][:3])}"
                         if len(self.game_state['banned_words']) > 3:
                             banned_text += f" +{len(self.game_state['banned_words']) - 3} more"
                         banned_surface = font.render(banned_text, True, ERROR_COLOR)
-                        self.screen.blit(banned_surface, (PADDING, obstacles_y))
-                        obstacles_y += 40
+                        info_panel.blit(banned_surface, (PADDING, obstacles_y))
+                        obstacles_y += 30
                     
                     if self.game_state.get('restricted_letters') and len(self.game_state['restricted_letters']) > 0:
                         restricted_text = f"Restricted Letters: {', '.join(self.game_state['restricted_letters'])}"
                         restricted_surface = font.render(restricted_text, True, ERROR_COLOR)
-                        self.screen.blit(restricted_surface, (PADDING, obstacles_y))
+                        info_panel.blit(restricted_surface, (PADDING, obstacles_y))
+                
+                # Add the info panel to the screen
+                self.screen.blit(info_panel, (0, 0))
+                
+                # Draw word graph below the info panel
+                self.word_graph.update_layout(self.game_state['path'], self.optimal_path)
+                self.word_graph.draw(self.screen, 
+                                   self.game_state['current_word'],
+                                   self.game_state['target_word'])
                 
                 # Draw input box and buttons
                 self.input_box.draw(self.screen)
