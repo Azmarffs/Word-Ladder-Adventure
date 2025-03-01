@@ -45,7 +45,7 @@ MENU_STATE_ALGORITHM = "ALGORITHM"
 NODE_RADIUS = 30
 NODE_SPACING = 100
 GRAPH_CENTER_X = WINDOW_WIDTH // 2
-GRAPH_CENTER_Y = WINDOW_HEIGHT // 2
+GRAPH_CENTER_Y = WINDOW_HEIGHT // 2 - 50  # Moved up to make room for input field
 ANIMATION_SPEED = 0.05
 HOVER_SCALE = 1.05
 
@@ -419,6 +419,12 @@ class WordGraph:
         self.edges: List[Tuple[str, str]] = []
         self.optimal_path: List[str] = []
         
+    def clear(self):
+        """Clear the graph when changing difficulty modes"""
+        self.nodes = {}
+        self.edges = []
+        self.optimal_path = []
+        
     def update_layout(self, path: List[str], optimal_path: List[str] = None):
         # Create nodes for each word in the path
         num_nodes = len(path)
@@ -713,7 +719,7 @@ class MainMenu:
                 BUTTON_HEIGHT,
                 "Quit Game",
                 ERROR_COLOR,
-                "✕"
+                "X"
             )
         }
         
@@ -882,13 +888,15 @@ class WordLadderGUI:
             )
         }
         
+        # Move input box below the graph
         self.input_box = ModernInputBox(center_x - INPUT_WIDTH//2, 
-                                      WINDOW_HEIGHT//2 + 50, 
+                                      WINDOW_HEIGHT//2 + 150,  # Moved down to be below the graph
                                       INPUT_WIDTH, 
                                       INPUT_HEIGHT)
         
+        # Reposition game buttons
         self.game_buttons = {
-            'menu': MenuButton(PADDING, 
+            'menu': MenuButton(WINDOW_WIDTH - BUTTON_WIDTH - PADDING,  # Moved to top right
                              PADDING,
                              BUTTON_WIDTH, 
                              BUTTON_HEIGHT, 
@@ -963,58 +971,88 @@ class WordLadderGUI:
                                    self.game_state['current_word'],
                                    self.game_state['target_word'])
                 
-                # Draw game info
+                # Draw game info in a panel at the top
+                info_panel = pygame.Surface((WINDOW_WIDTH, 80), pygame.SRCALPHA)
+                pygame.draw.rect(info_panel, (255, 255, 255, 180), info_panel.get_rect())
+                
+                # Draw game info text
                 font = pygame.font.Font(None, 36)
-                info_text = [
-                    f"Current Word: {self.game_state['current_word']}",
-                    f"Target Word: {self.game_state['target_word']}",
-                    f"Moves: {self.game_state['moves']}/{self.game_state['max_moves']}",
-                    f"Score: {self.score}"
-                ]
                 
-                for i, text in enumerate(info_text):
-                    surface = font.render(text, True, BLACK)
-                    self.screen.blit(surface, (PADDING, PADDING + 40*i))
+                # Left side info
+                current_word_text = f"Current: {self.game_state['current_word']}"
+                target_word_text = f"Target: {self.game_state['target_word']}"
+                moves_text = f"Moves: {self.game_state['moves']}/{self.game_state['max_moves']}"
                 
-                # Draw algorithm indicator
+                current_surface = font.render(current_word_text, True, BLACK)
+                target_surface = font.render(target_word_text, True, BLACK)
+                moves_surface = font.render(moves_text, True, BLACK)
+                
+                info_panel.blit(current_surface, (PADDING, 10))
+                info_panel.blit(target_surface, (PADDING, 45))
+                info_panel.blit(moves_surface, (WINDOW_WIDTH//2 - moves_surface.get_width()//2, 25))
+                
+                # Right side info
+                score_text = f"Score: {self.score}"
+                score_surface = font.render(score_text, True, BLACK)
+                info_panel.blit(score_surface, (WINDOW_WIDTH - score_surface.get_width() - PADDING, 25))
+                
+                # Draw algorithm indicator below the main menu button
                 alg_color = ALGORITHM_COLORS[self.game.hint_algorithm]
                 alg_text = f"Hint: {self.game.hint_algorithm.upper()}"
                 alg_surface = font.render(alg_text, True, alg_color)
-                self.screen.blit(alg_surface, (WINDOW_WIDTH - alg_surface.get_width() - PADDING, PADDING))
+
+                # Position the algorithm text below the main menu button
+                menu_button_rect = self.game_buttons['menu'].rect
+                alg_text_x = menu_button_rect.x
+                alg_text_y = menu_button_rect.bottom + 10  # 10 pixels below the menu button
+
+                # Draw the algorithm text
+                self.screen.blit(alg_surface, (alg_text_x, alg_text_y))
+                
+                self.screen.blit(info_panel, (0, 0))
                 
                 # Draw obstacles info for Challenge mode
                 if self.game_state['difficulty'] == 'CHALLENGE':
-                    obstacles_y = PADDING + 40*len(info_text) + 20
+                    obstacles_panel = pygame.Surface((WINDOW_WIDTH, 40), pygame.SRCALPHA)
+                    pygame.draw.rect(obstacles_panel, (255, 255, 255, 150), obstacles_panel.get_rect())
                     
+                    obstacles_text = []
                     if self.game_state.get('banned_words') and len(self.game_state['banned_words']) > 0:
                         banned_text = f"Banned Words: {', '.join(self.game_state['banned_words'][:3])}"
                         if len(self.game_state['banned_words']) > 3:
                             banned_text += f" +{len(self.game_state['banned_words']) - 3} more"
-                        banned_surface = font.render(banned_text, True, ERROR_COLOR)
-                        self.screen.blit(banned_surface, (PADDING, obstacles_y))
-                        obstacles_y += 40
+                        obstacles_text.append(banned_text)
                     
                     if self.game_state.get('restricted_letters') and len(self.game_state['restricted_letters']) > 0:
                         restricted_text = f"Restricted Letters: {', '.join(self.game_state['restricted_letters'])}"
-                        restricted_surface = font.render(restricted_text, True, ERROR_COLOR)
-                        self.screen.blit(restricted_surface, (PADDING, obstacles_y))
+                        obstacles_text.append(restricted_text)
+                    
+                    if obstacles_text:
+                        combined_text = " | ".join(obstacles_text)
+                        obstacles_surface = font.render(combined_text, True, ERROR_COLOR)
+                        obstacles_panel.blit(obstacles_surface, (PADDING, 5))
+                        self.screen.blit(obstacles_panel, (0, 80))
                 
                 # Draw input box and buttons
                 self.input_box.draw(self.screen)
                 for button in self.game_buttons.values():
                     button.draw(self.screen)
                 
-                # Draw message
+                # Draw message (moved to top of screen, above the graph)
                 if self.message:
                     if self.message_animation < 1:
                         self.message_animation = min(1, self.message_animation + 0.05)
-                    message_surface = font.render(self.message, True, self.message_color)
-                    message_surface.set_alpha(int(255 * self.message_animation))
-                    message_rect = message_surface.get_rect(
-                        centerx=WINDOW_WIDTH//2,
-                        y=WINDOW_HEIGHT//2 - 100
-                    )
-                    self.screen.blit(message_surface, message_rect)
+                    
+                    # Create a message panel
+                    message_font = font.render(self.message, True, self.message_color)
+                    message_panel = pygame.Surface((message_font.get_width() + 20, message_font.get_height() + 10), pygame.SRCALPHA)
+                    pygame.draw.rect(message_panel, (255, 255, 255, 200), message_panel.get_rect(), border_radius=10)
+                    message_panel.blit(message_font, (10, 5))
+                    message_panel.set_alpha(int(255 * self.message_animation))
+                    
+                    # Position message at the top of the screen
+                    message_rect = message_panel.get_rect(centerx=WINDOW_WIDTH//2, y=90)
+                    self.screen.blit(message_panel, message_rect)
         
         pygame.display.flip()
         
@@ -1058,6 +1096,8 @@ class WordLadderGUI:
                         self.menu_state = new_state
                         if new_state == MENU_STATE_GAME and custom_words:
                             try:
+                                # Clear the graph when starting a new game
+                                self.word_graph.clear()
                                 self.game_state = self.game.start_game(custom_words=custom_words)
                                 self.show_message(f"Transform '{self.game_state['start_word']}' into '{self.game_state['target_word']}'", PRIMARY_COLOR)
                             except ValueError as e:
@@ -1077,6 +1117,8 @@ class WordLadderGUI:
                         for diff, button in self.difficulty_buttons.items():
                             if button.handle_event(event):
                                 self.selected_difficulty = diff
+                                # Clear the graph when changing difficulty
+                                self.word_graph.clear()
                                 self.game_state = self.game.start_game(diff)
                                 self.show_message(f"Transform '{self.game_state['start_word']}' into '{self.game_state['target_word']}'", PRIMARY_COLOR)
                                 break
@@ -1104,7 +1146,7 @@ class WordLadderGUI:
                                 hint_data = self.game.get_hint(detail_level='full')
                                 if hint_data and hint_data['full_path']:
                                     self.optimal_path = hint_data['full_path']
-                                    path_str = " → ".join(self.optimal_path)
+                                    path_str = " -> ".join(self.optimal_path)
                                     self.show_message(f"Optimal path: {path_str}", 
                                                     ALGORITHM_COLORS[self.game.hint_algorithm])
                                 else:
