@@ -1,6 +1,6 @@
 from collections import deque, defaultdict
 import heapq
-from typing import List, Set, Dict, Tuple, Optional, Callable
+from typing import List, Set, Dict, Tuple, Optional
 import string
 import random
 
@@ -109,7 +109,6 @@ class WordLadder:
         return differences == 1
 
     def bfs(self, start_word: str, target_word: str) -> Optional[List[str]]:
-        """Breadth-First Search implementation."""
         if start_word not in self.dictionary or target_word not in self.dictionary:
             return None
             
@@ -122,7 +121,11 @@ class WordLadder:
             if current_word == target_word:
                 return path
                 
-            for neighbor in self._get_neighbors(current_word):
+            neighbors = self._get_neighbors(current_word)
+            # Prioritize neighbors with more vowels
+            neighbors.sort(key=lambda x: sum(1 for c in x if c in 'aeiou'), reverse=True)
+            
+            for neighbor in neighbors:
                 if neighbor not in visited:
                     visited.add(neighbor)
                     queue.append((neighbor, path + [neighbor]))
@@ -130,7 +133,6 @@ class WordLadder:
         return None
 
     def ucs(self, start_word: str, target_word: str) -> Optional[List[str]]:
-        """Uniform Cost Search implementation."""
         if start_word not in self.dictionary or target_word not in self.dictionary:
             return None
             
@@ -150,14 +152,19 @@ class WordLadder:
             
             for neighbor in self._get_neighbors(current_word):
                 if neighbor not in visited:
-                    new_cost = cost + 1
+                    # Assign lower cost for vowel changes
+                    if current_word[0] in 'aeiou' or neighbor[0] in 'aeiou':
+                        new_cost = cost + 0.5  # Lower cost for vowel changes
+                    else:
+                        new_cost = cost + 1  # Normal cost for consonant changes
                     heapq.heappush(priority_queue, (new_cost, neighbor, path + [neighbor]))
         
         return None
 
     def _calculate_heuristic(self, word: str, target: str) -> int:
         """Calculate heuristic value (number of different letters) for A* search."""
-        return sum(1 for a, b in zip(word, target) if a != b)
+        vowels = set('aeiou')
+        return sum(1 for a, b in zip(word, target) if a != b and a in vowels)
 
     def a_star(self, start_word: str, target_word: str) -> Optional[List[str]]:
         """A* Search implementation."""
@@ -201,21 +208,13 @@ class WordLadder:
         return bool(self.a_star(start_word, target_word))
 
 class WordLadderGame:
-    def __init__(self, dictionary_path: str = None):
-        # If no dictionary provided, use a default set of words
-        if dictionary_path:
+    def __init__(self, dictionary_path: str = "words.txt"):
+        # Load dictionary from file
+        try:
             with open(dictionary_path, 'r') as f:
-                dictionary = set(word.strip().lower() for word in f)
-        else:
-            # Default dictionary for demo
-            dictionary = {'cat', 'cot', 'cog', 'dog', 'dot', 'lot', 'log', 'hot', 
-                        'hat', 'rat', 'sat', 'sit', 'pit', 'put', 'but', 'bat',
-                        'plate', 'slate', 'slant', 'plant', 'plane', 'crane',
-                        'brain', 'train', 'trace', 'track', 'stack', 'stark',
-                        'start', 'smart', 'chart', 'charm', 'chasm', 'chase',
-                        'phase', 'phone', 'prone', 'prune', 'prude', 'pride',
-                        'prize', 'price', 'slice', 'spice', 'spine', 'shine',
-                        'shone', 'stone', 'store', 'score', 'scare', 'share'}
+                dictionary = set(word.strip().lower() for word in f if word.strip().isalpha())
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Dictionary file '{dictionary_path}' not found. Please ensure the file exists.")
         
         self.word_ladder = WordLadder(dictionary)
         self.current_game = None
@@ -317,5 +316,5 @@ class WordLadderGame:
         return list(self.word_ladder.dictionary)
 
 if __name__ == "__main__":
-    game = WordLadderGame()
+    game = WordLadderGame("words.txt")  # Ensure 'words.txt' is in the same directory
     game.start_game('BEGINNER')
